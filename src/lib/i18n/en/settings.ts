@@ -4,6 +4,7 @@ export default {
   "无线麦 SayAll 应用图标": "SayAll app icon",
   "让语音触手可及": "Voice within reach",
   "当前版本": "Current Version",
+  "离线版本不会自动检查或下载更新。": "This offline version does not check for or download updates automatically.",
   "可更新": "Update Available",
   "检查预览版更新": "Check for pre-release updates",
   "开启后，检查更新时也会包含尚在测试中的预览版本。":

@@ -7,6 +7,7 @@
     "dev": "vite",
     "build": "vue-tsc --noEmit && vite build",
     "test": "vitest run",
+    "test:offline": "node scripts/test-offline-runtime.mjs",
     "test:watch": "vitest",
     "tauri": "tauri",
     "tauri:dev": "tauri dev",
@@ -14,7 +15,6 @@
   },
   "dependencies": {
     "@tauri-apps/api": "^2.12.4",
-    "@tauri-apps/plugin-opener": "2.5.5",
     "vue": "^3.5.21"
   },
   "devDependencies": {

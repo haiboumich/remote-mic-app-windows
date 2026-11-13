@@ -314,10 +314,8 @@ fn run_step(
             Some(chord) => stepper.send_shortcut(chord),
             None => StepOutcome::Failed,
         }),
-        MacroAction::OpenUrl => StepRun::Outcome(match parameters.url.as_deref() {
-            Some(url) => stepper.open_url(url),
-            None => StepOutcome::Failed,
-        }),
+        // 离线发行版保留此枚举值仅为兼容已导入的旧配置；绝不交给系统浏览器。
+        MacroAction::OpenUrl => StepRun::Outcome(StepOutcome::Failed),
         MacroAction::RunMacro => run_nested(
             parameters.nested_macro_id.as_deref().unwrap_or_default(),
             library,

@@ -1160,17 +1160,12 @@ describe("Onboarding wizard shell", () => {
     expect(mocks.setMappingSuspension).toHaveBeenLastCalledWith(false);
   });
 
-  it("shows the VB-CABLE install path when no recommended endpoint exists", async () => {
+  it("shows offline VB-CABLE guidance when no recommended endpoint exists", async () => {
     mocks.getOnboardingState.mockResolvedValue(activeState("audio"));
     const wrapper = await mountWizard(runtimeWith());
 
     expect(wrapper.text()).toContain("还没有 VB-CABLE");
-    await wrapper
-      .findAll("button")
-      .find((button) => button.text().includes("打开官方下载页"))!
-      .trigger("click");
-    await flushPromises();
-    expect(mocks.openVbCableDownloadPage).toHaveBeenCalledTimes(1);
+    expect(wrapper.text()).not.toContain("打开官方下载页");
   });
 
   it("auto-selects the only recommended endpoint and unlocks the audio gate when ready", async () => {
@@ -1542,9 +1537,7 @@ describe("Onboarding input tool step", () => {
     expect(mocks.stageOnboardingVoiceBinding).toHaveBeenCalledWith("vokie", { keys: ["right_alt"] });
     expect(wrapper.text()).toContain("没有检测到 Vokie");
 
-    await wrapper.findAll("button").find((button) => button.text().includes("打开官网"))!.trigger("click");
-    await flushPromises();
-    expect(mocks.openVokieHomepage).toHaveBeenCalledTimes(1);
+    expect(wrapper.text()).not.toContain("打开官网");
 
     mocks.getVokieInstallation.mockResolvedValue({ installed: true, running: false });
     await wrapper.findAll("button").find((button) => button.text() === "重新检测")!.trigger("click");

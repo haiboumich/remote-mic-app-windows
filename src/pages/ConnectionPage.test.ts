@@ -293,7 +293,7 @@ describe("VB-CABLE first-launch guidance", () => {
     wrapper.unmount();
   });
 
-  it("shows the official installation action when VB-CABLE is unavailable", async () => {
+  it("shows offline installation guidance when VB-CABLE is unavailable", async () => {
     const wrapper = mount(ConnectionPage, { props: { runtime } });
     await flushPromises();
 
@@ -301,9 +301,7 @@ describe("VB-CABLE first-launch guidance", () => {
     expect(wrapper.text()).toContain("需要安装 VB-CABLE");
     expect(wrapper.text()).toContain("完成后需重启电脑");
 
-    await wrapper.get(".vb-cable-callout .primary-button").trigger("click");
-    await flushPromises();
-    expect(mocks.openVbCableDownloadPage).toHaveBeenCalledOnce();
+    expect(wrapper.text()).not.toContain("打开官方下载页");
     wrapper.unmount();
   });
 
@@ -647,7 +645,7 @@ describe("VB-CABLE first-launch guidance", () => {
     wrapper.unmount();
   });
 
-  it("未安装 Vokie：显示官网入口与重新检测，点官网按钮调用 openVokieHomepage", async () => {
+  it("未安装 Vokie：不提供外链，只保留重新检测", async () => {
     mocks.getVokieInstallation.mockResolvedValue({ installed: false, running: false });
     const wrapper = mount(ConnectionPage, { props: { runtime } });
     await flushPromises();
@@ -660,13 +658,7 @@ describe("VB-CABLE first-launch guidance", () => {
 
     expect(wrapper.text()).toContain("没有检测到 Vokie");
     const panel = wrapper.find(".setup-col:nth-child(2)");
-    const siteButton = panel
-      .findAll("button")
-      .find((button) => button.text().includes("打开官网"))!;
-    expect(siteButton).toBeDefined();
-    await siteButton.trigger("click");
-    await flushPromises();
-    expect(mocks.openVokieHomepage).toHaveBeenCalledOnce();
+    expect(panel.text()).not.toContain("打开官网");
 
     // 装好之后点“重新检测”：提示消失。
     mocks.getVokieInstallation.mockResolvedValue({ installed: true, running: true });

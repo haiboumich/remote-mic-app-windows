@@ -3,9 +3,7 @@ import { ref } from "vue";
 import {
   formatDiagnosticReport,
   getDiagnosticReport,
-  openGitHubRepository,
   openLogDirectory,
-  openOfficialWebsite,
 } from "../../lib/bridge";
 import { t } from "../../lib/i18n";
 
@@ -24,9 +22,6 @@ const diagnosticMessage = ref<LocalizedMessage | null>({ key: "尚未生成诊�
 const generatingDiagnostic = ref(false);
 const logDirectoryBusy = ref(false);
 const logDirectoryMessage = ref<LocalizedMessage | null>(null);
-
-const linkBusy = ref(false);
-const linkMessage = ref("");
 
 function logError(scope: string, error: unknown): void {
   console.warn(`${scope}: ${error instanceof Error ? error.message : String(error)}`);
@@ -80,30 +75,6 @@ async function onOpenLogDirectory(): Promise<void> {
   }
 }
 
-/**
- * 外部入口失败时不静默：capability 拒绝（Not allowed to open url）与系统
- * 没有默认浏览器是两类不同问题，压成"打开失败"会让现场无法归因。
- * 成功不显示任何提示。
- */
-async function openEntry(open: () => Promise<void>): Promise<void> {
-  linkBusy.value = true;
-  linkMessage.value = "";
-  try {
-    await open();
-  } catch (error) {
-    linkMessage.value = error instanceof Error ? error.message : String(error);
-  } finally {
-    linkBusy.value = false;
-  }
-}
-
-async function onOpenOfficialWebsite(): Promise<void> {
-  await openEntry(openOfficialWebsite);
-}
-
-async function onOpenGitHubRepository(): Promise<void> {
-  await openEntry(openGitHubRepository);
-}
 </script>
 
 <template>
@@ -155,49 +126,6 @@ async function onOpenGitHubRepository(): Promise<void> {
       </p>
     </article>
 
-    <!-- 问题反馈与诊断摘要同属「诊断与日志」分类（2026-10-31 用户标注）。 -->
-    <article class="card feedback-card">
-      <div class="card-title-row">
-        <div class="feedback-heading">
-          <span class="settings-row-icon" aria-hidden="true">
-            <svg viewBox="0 0 24 24" fill="none">
-              <path
-                d="M12 3.8c-4.8 0-8.7 3.1-8.7 7 0 2.3 1.3 4.3 3.3 5.6l-1 3.5 4-2.2c.8.2 1.6.3 2.4.3 4.8 0 8.7-3.1 8.7-7S16.8 3.8 12 3.8z"
-                stroke="currentColor"
-                stroke-width="1.9"
-                stroke-linecap="round"
-                stroke-linejoin="round"
-              />
-            </svg>
-          </span>
-          <div>
-            <h2>{{ t("问题反馈") }}</h2>
-            <p class="muted">{{ t("反馈无线麦 SayAll 的问题，或提出改进建议。") }}</p>
-          </div>
-        </div>
-        <div class="button-row">
-          <button
-            class="secondary-button"
-            type="button"
-            :disabled="linkBusy"
-            @click="onOpenOfficialWebsite"
-          >
-            {{ t("官网") }}
-          </button>
-          <button
-            class="secondary-button"
-            type="button"
-            :disabled="linkBusy"
-            @click="onOpenGitHubRepository"
-          >
-            GitHub
-          </button>
-        </div>
-      </div>
-      <p v-if="linkMessage" class="operation-message link-message" aria-live="polite">
-        {{ linkMessage }}
-      </p>
-    </article>
   </section>
 </template>
 
@@ -207,26 +135,6 @@ async function onOpenGitHubRepository(): Promise<void> {
   margin-top: 0;
 }
 
-/* 反馈卡与上面的诊断卡同属一组：沿用设置页行内图标 + 标题的节奏。 */
-.feedback-card {
-  margin-top: 14px;
-}
-
-.feedback-heading {
-  display: flex;
-  align-items: flex-start;
-  gap: 14px;
-  min-width: 0;
-}
-
-.feedback-heading h2 {
-  margin-bottom: 5px;
-}
-
-.feedback-heading .muted {
-  margin: 0;
-  font-size: 13px;
-}
 
 /* 日志目录入口与上面的摘要动作分组：摘要随时可生成，日志目录是"已经出问题、
    要取证"时才走的路，靠分隔线和一行说明避免被当成同一组按钮。 */

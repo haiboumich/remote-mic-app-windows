@@ -1,56 +1,8 @@
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { openUrl } from "@tauri-apps/plugin-opener";
 import { t } from "./i18n";
-import { effectiveLanguage, type EffectiveLanguage } from "./language-state";
+import { effectiveLanguage } from "./language-state";
 
-export const VB_CABLE_DOWNLOAD_URL = "https://vb-audio.com/Cable/";
-
-/**
- * 设置页“问题反馈”的外部入口（2026-10-01 用户指定，2026-10-02 官网地址改为
- * 带 `?from=win` 的来源标记，便于官网区分 Windows 版来客）：官网首页与 Windows
- * 版源码仓库。
- *
- * 这两个字符串同时是 `src-tauri/capabilities/default.json` 里 opener 白名单的
- * 键——改这里必须同步改那里，否则真机上点击会被插件判为 ForbiddenUrl
- * （`bridge.test.ts` 逐字锁定了这份契约，runtime simulation 另行断言不在真机
- * 上被拒绝）。
- */
-export const OFFICIAL_WEBSITE_URL = "https://sayall.app/?from=win";
-export const GITHUB_REPOSITORY_URL = "https://github.com/GetSayAll/remote-mic-app-windows";
-
-/**
- * 分享面板的官网链接（对齐 Mac `AppSharing` 的 `from=mac_share`，Windows 用
- * `from=win_share`）。二维码是同一链接在本机生成的静态资产，不请求二维码服务。
- * 修改此值必须重新生成 `public/app-share-qr.png`：
- * `corepack pnpm dlx qrcode -o public/app-share-qr.png -w 288 -q 2 -e M "<URL>"`
- */
-export const SHARE_WEBSITE_URL = "https://sayall.app/?from=win_share";
-
-/**
- * Vokie 官网（2026-10-01 Andy 提供）。
- *
- * 同样是 opener 白名单的键：新增 URL 必须同步
- * `src-tauri/capabilities/default.json` 与 `bridge.test.ts` 的白名单断言。
- */
-export const VOKIE_HOMEPAGE_URL = "https://vokie.com/";
-
-/**
- * 推荐页只加载官网（2026-10-18 用户指定），不在 Windows 客户端复制推荐内容。
- * 官网 `/recommendations/` 设置 `X-Frame-Options: DENY`，因此页面由 Tauri
- * 子 WebView 承载；这里只保留「打开官网」兜底所用的公开地址。
- */
-export const RECOMMENDATIONS_URL = "https://sayall.app/recommendations/";
-
-export type RecommendationsPageStatus = "loading" | "ready" | "failed";
-
-export interface RecommendationsPageEvent {
-  generation: number;
-  status: "ready" | "failed";
-  reason?: string | null;
-  /** 仅 ready 事件携带：当前网页能否后退（决定顶部返回条）。 */
-  canGoBack?: boolean | null;
-}
 
 export type ConnectionPhase =
   | "idle"
@@ -682,25 +634,10 @@ export interface PairedRemote {
   token?: string;
 }
 
-/** 应用内更新（Rust updater command 契约，camelCase 对齐 src-tauri/src/updater.rs）。 */
-export interface AppUpdateInfo {
-  currentVersion: string;
-  available: boolean;
-  version: string | null;
-  notes: string | null;
-  date: string | null;
-}
-
-export interface AppUpdatePreferences {
-  includePrereleases: boolean;
-}
-
 export type ThemePreference = "system" | "light" | "dark";
 
 /** 应用语言偏好；与 Rust `AppLanguage` / Mac `AppLanguage` 的持久化值一致。 */
 export type AppLanguagePreference = "system" | "zh-Hans" | "en";
-/** 推荐页实际使用的语言；`system` 已在语言模块里解析成这两个之一。 */
-export type { EffectiveLanguage } from "./language-state";
 
 /** Windows 系统强调色（设置 > 个性化 > 颜色），Rust accent 命令契约。 */
 export interface AccentRgb {
@@ -752,23 +689,6 @@ export async function getOpenWindowAtLaunch(): Promise<boolean> {
 export async function setOpenWindowAtLaunch(enabled: boolean): Promise<boolean> {
   if (!isTauriRuntime()) throw new Error("当前是浏览器预览，无法设置启动时打开主面板");
   return invoke<boolean>("set_open_window_at_launch", { enabled });
-}
-
-/**
- * 本次启动前刚完成更新时的版本号（对齐 Mac `update.completed.*`）。
- *
- * Rust 侧取走即清空：同一次运行里只提示一次，重新挂载页面不会重复弹。
- * 浏览器预览没有更新机制，返回 `null`。
- */
-export async function takeUpdateCompletedVersion(): Promise<string | null> {
-  if (!isTauriRuntime()) return null;
-  return invoke<string | null>("take_update_completed_version");
-}
-
-export interface AppUpdateProgress {
-  downloaded: number;
-  contentLength: number | null;
-  finished: boolean;
 }
 
 const browserSnapshot: RuntimeSnapshot = {
@@ -1167,98 +1087,6 @@ export async function setGainDb(gainDb: number): Promise<number> {
   return invoke<number>("set_gain_db", { gainDb });
 }
 
-export async function openVbCableDownloadPage(): Promise<void> {
-  if (!isTauriRuntime()) {
-    window.open(VB_CABLE_DOWNLOAD_URL, "_blank", "noopener,noreferrer");
-    return;
-  }
-  await openUrl(VB_CABLE_DOWNLOAD_URL);
-}
-
-/**
- * 外部链接的统一出口：浏览器预览开新标签，Tauri 运行时交给 opener 插件
- * （插件只放行 capabilities 白名单内的 URL，前端不做过滤，也不拼接参数）。
- */
-async function openExternalUrl(url: string): Promise<void> {
-  if (!isTauriRuntime()) {
-    window.open(url, "_blank", "noopener,noreferrer");
-    return;
-  }
-  await openUrl(url);
-}
-
-/** 设置页顶部“官网”入口。 */
-export async function openOfficialWebsite(): Promise<void> {
-  await openExternalUrl(OFFICIAL_WEBSITE_URL);
-}
-
-/** 设置页“问题反馈”里的“GitHub”入口。 */
-export async function openGitHubRepository(): Promise<void> {
-  await openExternalUrl(GITHUB_REPOSITORY_URL);
-}
-
-/** 连接页“Vokie 未安装”提示里的官网入口（2026-10-01）。 */
-export async function openVokieHomepage(): Promise<void> {
-  await openExternalUrl(VOKIE_HOMEPAGE_URL);
-}
-
-/**
- * 显示推荐页（实际内容是官网页面，由 Rust 侧子 WebView 承载）。
- * 返回本次加载的 generation；迟到的 ready/failed 事件由页面按它丢弃。
- */
-export async function showRecommendationsPage(
-  theme: "light" | "dark",
-  language: EffectiveLanguage = "zh-Hans",
-): Promise<number> {
-  if (!isTauriRuntime()) {
-    throw new Error("当前是浏览器预览，无法在应用内打开推荐页面");
-  }
-  return invoke<number>("show_recommendations", { theme, language });
-}
-
-/** 离开推荐页时隐藏子 WebView；已就绪文档保留，返回时直接显示（与 Mac 一致）。 */
-export async function hideRecommendationsPage(): Promise<void> {
-  if (!isTauriRuntime()) return;
-  await invoke("hide_recommendations");
-}
-
-/**
- * 失败后重试：重新加载**当前**推荐页（保留 `?item=` 详情参数），
- * 而不是回到列表；generation 语义与 `showRecommendationsPage` 相同。
- */
-export async function retryRecommendationsPage(
-  theme: "light" | "dark",
-  language: EffectiveLanguage = "zh-Hans",
-): Promise<number> {
-  if (!isTauriRuntime()) {
-    throw new Error("当前是浏览器预览，无法在应用内打开推荐页面");
-  }
-  return invoke<number>("retry_recommendations", { theme, language });
-}
-
-/** 网页内后退（顶部「返回上一页」）；仅 ready 且 canGoBack 时可用。 */
-export async function goBackRecommendationsPage(): Promise<void> {
-  if (!isTauriRuntime()) return;
-  await invoke("go_back_recommendations");
-}
-
-/**
- * 加载失败时的「打开官网」：Rust 侧保留当前详情参数并去掉 `embed/theme`
- * 等 App 专用参数，再交给系统浏览器。浏览器预览直接打开列表页。
- */
-export async function openRecommendationsWebsite(
-  language: EffectiveLanguage = "zh-Hans",
-): Promise<void> {
-  if (!isTauriRuntime()) {
-    const url =
-      language === "en"
-        ? "https://sayall.app/en/recommendations/"
-        : RECOMMENDATIONS_URL;
-    window.open(url, "_blank", "noopener,noreferrer");
-    return;
-  }
-  await invoke("open_recommendations_website");
-}
 
 /** Vokie 检测结果：未安装时连接页显示官网入口；已安装但没运行时提示先启动它。 */
 export interface VokieInstallation {
@@ -1916,36 +1744,6 @@ export async function getImeStatus(): Promise<ImeStatus> {
   return invoke<ImeStatus>("get_ime_status");
 }
 
-/** 检查应用更新；浏览器预览下返回"无更新"占位（不发起网络请求）。 */
-export async function checkAppUpdate(): Promise<AppUpdateInfo> {
-  if (!isTauriRuntime()) {
-    return {
-      currentVersion: browserSnapshot.appVersion,
-      available: false,
-      version: null,
-      notes: null,
-      date: null,
-    };
-  }
-  return invoke<AppUpdateInfo>("check_app_update");
-}
-
-export async function getAppUpdatePreferences(): Promise<AppUpdatePreferences> {
-  if (!isTauriRuntime()) {
-    return { includePrereleases: false };
-  }
-  return invoke<AppUpdatePreferences>("get_app_update_preferences");
-}
-
-export async function setAppUpdatePreferences(
-  includePrereleases: boolean,
-): Promise<AppUpdatePreferences> {
-  if (!isTauriRuntime()) {
-    return { includePrereleases };
-  }
-  return invoke<AppUpdatePreferences>("set_app_update_preferences", { includePrereleases });
-}
-
 export async function getThemePreference(operationId: string): Promise<ThemePreference> {
   if (!isTauriRuntime()) {
     return "system";
@@ -2035,30 +1833,6 @@ export async function setAppIcon(identifier: AppIconIdentifier): Promise<AppIcon
     );
   }
   return applied;
-}
-
-/** 下载并安装已检查到的更新（Windows 上安装成功时应用会退出并由安装器重启）。 */
-export async function installAppUpdate(): Promise<void> {
-  if (!isTauriRuntime()) {
-    throw new Error("当前是浏览器预览，无法安装更新");
-  }
-  await invoke("install_app_update");
-}
-
-/** 订阅更新下载进度；浏览器预览下为空订阅。 */
-export async function subscribeAppUpdateProgress(
-  handler: (progress: AppUpdateProgress) => void,
-): Promise<() => void> {
-  if (!isTauriRuntime()) {
-    return () => {};
-  }
-  const { listen } = await import("@tauri-apps/api/event");
-  const unlisten = await listen<AppUpdateProgress>("app-update-progress", (event) =>
-    handler(event.payload),
-  );
-  return () => {
-    void unlisten();
-  };
 }
 
 /** 纯英文/符号的键名不查字典，避免每次渲染都产生无意义缺失告警。 */

@@ -53,9 +53,7 @@ import {
   getVokieInstallation,
   isRecommendedVoiceEndpoint,
   listAudioEndpoints,
-  openVbCableDownloadPage,
   launchVokie,
-  openVokieHomepage,
   remoteModelLabel,
   scanPairedRemotes,
   selectAudioEndpoint,
@@ -120,7 +118,6 @@ const showEndpointList = ref(false);
 const scanningAudio = ref(false);
 const audioScanComplete = ref(false);
 const selectingEndpointId = ref("");
-const openingVbCablePage = ref(false);
 const audioMessage = ref("");
 /**
  * 语音增益（dB，0–24；对齐 Mac 设置页「增益」滑块）：0 = 原始音量。
@@ -159,7 +156,6 @@ const applyingTool = ref<VoiceInputTool | null>(null);
 const vokieInstalled = ref<boolean | null>(null);
 const vokieRunning = ref<boolean | null>(null);
 const checkingVokie = ref(false);
-const openingVokiePage = ref(false);
 const launchingVokie = ref(false);
 const vokieCheckMessage = ref("");
 let pollTimer: ReturnType<typeof setInterval> | undefined;
@@ -344,18 +340,6 @@ async function refreshVokieInstallation(): Promise<void> {
     vokieCheckMessage.value = actionErrorText("vokie_installation", error);
   } finally {
     checkingVokie.value = false;
-  }
-}
-
-async function openVokiePage(): Promise<void> {
-  openingVokiePage.value = true;
-  try {
-    await openVokieHomepage();
-    vokieCheckMessage.value = t("已打开 Vokie 官网；安装后点“重新检测”。");
-  } catch (error) {
-    vokieCheckMessage.value = actionErrorText("open_vokie_homepage", error);
-  } finally {
-    openingVokiePage.value = false;
   }
 }
 
@@ -1107,20 +1091,6 @@ async function chooseAudioEndpoint(endpoint: AudioEndpoint, automatic = false) {
   }
 }
 
-async function openVbCablePage() {
-  openingVbCablePage.value = true;
-  try {
-    await openVbCableDownloadPage();
-    audioMessage.value = t(
-      "已打开 VB-CABLE 官方下载页面；安装时需要管理员权限，完成后请重启电脑",
-    );
-  } catch (error) {
-    audioMessage.value = actionErrorText("open_vb_cable_page", error);
-  } finally {
-    openingVbCablePage.value = false;
-  }
-}
-
 async function initializeAudio() {
   const restoredAudio = await refreshAudio();
   await detectAudioEndpoints(restoredAudio);
@@ -1362,9 +1332,6 @@ onUnmounted(() => {
             <p>{{ t("由 VB-Audio 提供的免费虚拟声卡。安装需要管理员权限，完成后需重启电脑。") }}</p>
           </div>
           <div class="button-row">
-            <button class="primary-button" type="button" :disabled="openingVbCablePage" @click="openVbCablePage">
-              {{ openingVbCablePage ? t("正在打开…") : t("打开官方下载页") }}
-            </button>
             <button class="secondary-button" type="button" :disabled="scanningAudio" @click="scanAudio()">
               {{ t("重新检测") }}
             </button>
@@ -1508,14 +1475,6 @@ onUnmounted(() => {
             <div v-if="vokieInstalled === false" class="info-callout warning callout-small">
               {{ t("没有检测到 Vokie。先安装，再回来设置。") }}
               <div class="button-row">
-                <button
-                  class="primary-button"
-                  type="button"
-                  :disabled="openingVokiePage"
-                  @click="openVokiePage"
-                >
-                  {{ openingVokiePage ? t("正在打开…") : t("打开官网 vokie.com") }}
-                </button>
                 <button
                   class="secondary-button"
                   type="button"

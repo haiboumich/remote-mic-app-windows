@@ -33,7 +33,6 @@
     "targets": [
       "nsis"
     ],
-    "createUpdaterArtifacts": true,
     "publisher": "GetSayAll",
     "category": "Productivity",
     "shortDescription": "把 RC001/RC003 遥控器的语音和按键桥接到 Windows",
@@ -45,7 +44,7 @@
     "windows": {
       "allowDowngrades": false,
       "webviewInstallMode": {
-        "type": "downloadBootstrapper",
+        "type": "offlineInstaller",
         "silent": true
       },
       "nsis": {
@@ -66,16 +65,5 @@
       "frida-gadget.dll",
       "sayall-mcp.exe"
     ]
-  },
-  "plugins": {
-    "updater": {
-      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDcyRUY0RDUwOEQ1ODAyNDgKUldSSUFsaU5VRTN2Y3ZleWlGT3AzSHpNZk5ka09TZFZRUHRsci9BVXJacmU0QTljSElnd0RydTQK",
-      "endpoints": [
-        "https://github.com/GetSayAll/remote-mic-app-windows/releases/latest/download/latest.json"
-      ],
-      "windows": {
-        "installMode": "passive"
-      }
-    }
   }
 }

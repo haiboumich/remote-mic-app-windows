@@ -12,7 +12,7 @@ import {
 
 describe("Windows navigation", () => {
   it("keeps the approved Mac-derived page order without empty entries", () => {
-    // 2026-10-25 用户指定：推荐放在连接上方；2026-10-24 个人中心固定在最后。
+    // 严格离线发行版不提供远程推荐页；个人中心固定在最后。
     // 私有构建可能追加自己的页面；这里只核对公开页面的相对顺序。
     const publicIds = new Set(publicNavigationItems.map((item) => item.id));
     const items = navigationItems.filter((item) => publicIds.has(item.id));
@@ -20,7 +20,6 @@ describe("Windows navigation", () => {
       "buttons",
       "apps",
       "macros",
-      "recommendations",
       "connection",
       "reflections",
       "settings",
@@ -29,17 +28,15 @@ describe("Windows navigation", () => {
     // 2026-11-09：APP 适配紧跟在按键之后（对齐 Mac SettingsSection.applications）。
     expect(items[1].label).toBe("APP 适配");
     expect(items[1].icon).toBe("apps");
-    expect(items[3].label).toBe("推荐");
-    expect(items[3].icon).toBe("sparkles");
-    expect(items[4].label).toBe("连接");
+    expect(items[3].label).toBe("连接");
     // 2026-10-25 用户指定：回眸紧挨设置上方。
-    expect(items[5].label).toBe("回眸");
-    expect(items[5].icon).toBe("textbubble");
+    expect(items[4].label).toBe("回眸");
+    expect(items[4].icon).toBe("textbubble");
     // 2026-10-02 用户指定：原「关于」页改名「设置」，图标换成 Mac 同款齿轮。
-    expect(items[6].label).toBe("设置");
-    expect(items[6].icon).toBe("gear");
-    expect(items[7].label).toBe("个人中心");
-    expect(items[7].icon).toBe("person");
+    expect(items[5].label).toBe("设置");
+    expect(items[5].icon).toBe("gear");
+    expect(items[6].label).toBe("个人中心");
+    expect(items[6].icon).toBe("person");
     expect(items.every((item) => item.label.length > 0)).toBe(true);
   });
 

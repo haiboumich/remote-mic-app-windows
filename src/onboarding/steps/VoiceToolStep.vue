@@ -21,7 +21,6 @@ const props = defineProps<{
 const emit = defineEmits<{
   selectTool: [tool: VoiceInputTool];
   toggleCapture: [];
-  openVokieSite: [];
   launchVokie: [];
   refreshVokie: [];
   chooseOtherKeys: [keys: KeyCode[]];
@@ -169,9 +168,6 @@ function isOtherKeySelected(keys: KeyCode[]): boolean {
       <template v-else>
         <p>{{ t("没有检测到 Vokie。先安装，再回来「重新检测」。") }}</p>
         <div class="onboarding-chips">
-          <button class="onboarding-chip strong" type="button" @click="$emit('openVokieSite')">
-            {{ t("打开官网 vokie.com") }}
-          </button>
           <button class="onboarding-chip" type="button" @click="$emit('refreshVokie')">
             {{ t("重新检测") }}
           </button>

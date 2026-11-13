@@ -6,11 +6,10 @@ import type { Ref } from "vue";
 import { ref } from "vue";
 import type { RuntimeSnapshot } from "../lib/bridge";
 import { effectiveLanguage } from "../lib/language-state";
-import { useAppUpdate, type AppUpdatePhase } from "../lib/app-update";
 import SettingsPage from "./SettingsPage.vue";
 
-const phase: Ref<AppUpdatePhase> = ref("idle");
-const info = ref<Awaited<ReturnType<typeof useAppUpdate>>["info"]["value"]>(null);
+const phase: Ref<string> = ref("idle");
+const info = ref<unknown>(null);
 const errorMessage = ref("");
 const progress = ref({ downloaded: 0, contentLength: null as number | null, finished: false });
 const includePrereleases = ref(false);
@@ -41,26 +40,6 @@ const bridge = vi.hoisted(() => ({
   restartOnboarding: vi.fn<() => Promise<{ flowVersion: number; completedVersion: number; step: string; isActive: boolean }>>(),
   getMembershipAccountSummary: vi.fn<() => Promise<unknown>>(),
 }));
-
-vi.mock("../lib/app-update", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("../lib/app-update")>();
-  return {
-    ...actual,
-    useAppUpdate: () => ({
-      phase,
-      info,
-      errorMessage,
-      progress,
-      includePrereleases,
-      preferenceBusy,
-      preferenceError,
-      check,
-      install,
-      loadUpdatePreferences,
-      setIncludePrereleases,
-    }),
-  };
-});
 
 vi.mock("../lib/theme", () => ({
   useTheme: () => ({
@@ -207,7 +186,8 @@ describe("settings page", () => {
     expect(wrapper.text()).toContain("让语音触手可及");
     expect(wrapper.text()).toContain("当前版本");
     expect(wrapper.text()).toContain("0.5.0");
-    expect(wrapper.text()).toContain("检查预览版更新");
+    expect(wrapper.text()).toContain("离线版本不会自动检查或下载更新。");
+    expect(wrapper.text()).not.toContain("检查预览版更新");
     // 2026-10-02 用户指定：这些说明文字都去掉。
     expect(wrapper.text()).not.toContain("预览版包含新功能");
     expect(wrapper.text()).not.toContain("该选择会在重启后保持");
@@ -252,27 +232,9 @@ describe("settings page", () => {
     expect(setLanguagePreference).toHaveBeenCalledWith("en");
   });
 
-  it("预览版更新开关默认关闭并保存用户选择", async () => {
-    const wrapper = mount(SettingsPage, { props: { runtime } });
-    await flushPromises();
-    expect(loadUpdatePreferences).toHaveBeenCalledTimes(1);
-    const toggle = wrapper.find<HTMLInputElement>('label[title*="预览版本"] input');
-    expect(toggle.element.checked).toBe(false);
-
-    await toggle.setValue(true);
-    expect(setIncludePrereleases).toHaveBeenCalledWith(true);
-  });
-
   it("设置页的 Switch 开关都在对应文字右侧（2026-10-03 用户要求）", async () => {
     const wrapper = mount(SettingsPage, { props: { runtime } });
     await flushPromises();
-
-    // 顶部「检查预览版更新」：文字在前、开关在后（标签行内顺序即视觉顺序）。
-    const prerelease = wrapper.get("label.prerelease-toggle");
-    expect((prerelease.element.firstElementChild as HTMLElement).textContent).toContain(
-      "检查预览版更新",
-    );
-    expect(prerelease.element.lastElementChild).toBe(prerelease.find("input").element);
 
     // 通用「登录时自动启动」：同样文字在前、开关在后。
     const launch = wrapper.get('label[title*="Windows 登录启动项"]');
@@ -357,16 +319,7 @@ describe("settings page", () => {
     expect(toggle.element.checked).toBe(true);
   });
 
-  it("初始状态显示手动检查入口", () => {
-    const wrapper = mount(SettingsPage, { props: { runtime } });
-    expect(wrapper.text()).toContain("手动检查是否有新版本");
-    expect(wrapper.text()).not.toContain("开源许可");
-    expect(wrapper.text()).not.toContain("GPL-3.0");
-    const button = wrapper.findAll("button").find((b) => b.text().includes("检查更新"));
-    expect(button).toBeDefined();
-  });
-
-  it("权限页并入设置：权限三项与诊断/日志/问题反馈按分组呈现", async () => {
+  it("权限页并入设置：权限三项与诊断/日志按分组呈现", async () => {
     const wrapper = mount(SettingsPage, { props: { runtime } });
     await flushPromises();
 
@@ -382,11 +335,9 @@ describe("settings page", () => {
     expect(permissionSection.findAll(".permission-row")).toHaveLength(3);
     expect(permissionSection.text()).toContain("当前电脑不支持");
 
-    // 问题反馈与诊断摘要、日志目录同属「诊断与日志」分类。
     const diagnosticsSection = sections[3];
     expect(diagnosticsSection.find(".diagnostics-card").exists()).toBe(true);
-    expect(diagnosticsSection.find(".feedback-card").exists()).toBe(true);
-    expect(diagnosticsSection.text()).toContain("问题反馈");
+    expect(diagnosticsSection.find(".feedback-card").exists()).toBe(false);
   });
 
   it("诊断与日志：生成摘要、复制摘要，且摘要不含隐私字段", async () => {
@@ -446,46 +397,6 @@ describe("settings page", () => {
     expect(wrapper.text()).toContain("无法打开日志目录，请稍后重试。");
   });
 
-  it("问题反馈模块提供官网与 GitHub 入口，官网带 Windows 来源标记", async () => {
-    const open = vi.spyOn(window, "open").mockImplementation(() => null);
-    const wrapper = mount(SettingsPage, { props: { runtime } });
-    await flushPromises();
-
-    const buttons = wrapper
-      .findAll("button")
-      .filter((button) => ["官网", "GitHub"].includes(button.text()));
-    expect(buttons.map((button) => button.text())).toEqual(["官网", "GitHub"]);
-
-    await buttons[0].trigger("click");
-    await buttons[1].trigger("click");
-    await flushPromises();
-
-    expect(open.mock.calls.map(([url]) => url)).toEqual([
-      "https://sayall.app/?from=win",
-      "https://github.com/GetSayAll/remote-mic-app-windows",
-    ]);
-    // 2026-10-02 用户指定：成功不再显示“已在系统默认浏览器打开…”这类提示。
-    expect(wrapper.find(".link-message").exists()).toBe(false);
-    open.mockRestore();
-  });
-
-  it("入口打开失败时就地显示原因而不是静默", async () => {
-    const open = vi
-      .spyOn(window, "open")
-      .mockImplementation(() => {
-        throw new Error("Not allowed to open url https://sayall.app/?from=win");
-      });
-    const wrapper = mount(SettingsPage, { props: { runtime } });
-    await flushPromises();
-
-    const website = wrapper.findAll("button").find((button) => button.text() === "官网");
-    await website!.trigger("click");
-    await flushPromises();
-
-    expect(wrapper.text()).toContain("Not allowed to open url");
-    open.mockRestore();
-  });
-
   it("应用图标新装默认几何鸭，切换后保存并立即生效，顶部标识同步换图", async () => {
     bridge.setAppIcon.mockImplementation(async (identifier) => identifier);
     const wrapper = mount(SettingsPage, { props: { runtime } });
@@ -525,82 +436,6 @@ describe("settings page", () => {
 
     expect(wrapper.get('[role="alert"]').text()).toContain("无法保存应用图标设置");
     expect(radios[0].element.checked).toBe(true);
-  });
-
-  it("发现新版本时展示版本、说明与安装入口", async () => {
-    phase.value = "available";
-    info.value = {
-      currentVersion: "0.5.0",
-      available: true,
-      version: "0.6.0",
-      notes: "修复若干问题",
-      date: null,
-    };
-    const wrapper = mount(SettingsPage, { props: { runtime } });
-    await flushPromises();
-    expect(wrapper.text()).toContain("发现新版本");
-    expect(wrapper.text()).toContain("0.6.0");
-    expect(wrapper.text()).toContain("修复若干问题");
-    const installButton = wrapper
-      .findAll("button")
-      .find((b) => b.text().includes("下载并安装"));
-    expect(installButton).toBeDefined();
-    await installButton!.trigger("click");
-    expect(install).toHaveBeenCalledTimes(1);
-  });
-
-  it("下载中显示进度条与双值文案", async () => {
-    phase.value = "downloading";
-    progress.value = { downloaded: 1_048_576, contentLength: 4_194_304, finished: false };
-    const wrapper = mount(SettingsPage, { props: { runtime } });
-    await flushPromises();
-    expect(wrapper.text()).toContain("1.0 MB / 4.0 MB");
-    const bar = wrapper.find(".update-progress-bar");
-    expect(bar.exists()).toBe(true);
-    expect(bar.attributes("style")).toContain("width: 25%");
-  });
-
-  it("安装中提示自动重启且不提供可点击操作", async () => {
-    phase.value = "installing";
-    const wrapper = mount(SettingsPage, { props: { runtime } });
-    await flushPromises();
-    expect(wrapper.text()).toContain("正在安装更新，应用将自动重启");
-    const installButton = wrapper
-      .findAll("button")
-      .find((b) => b.text().includes("下载并安装"));
-    expect(installButton).toBeUndefined();
-  });
-
-  it("失败时展示错误并提供重试检查", async () => {
-    phase.value = "failed";
-    errorMessage.value = "网络连接失败，请稍后重试";
-    const wrapper = mount(SettingsPage, { props: { runtime } });
-    await flushPromises();
-    // Rust/插件原始错误只进控制台，界面统一给可翻译的固定文案。
-    expect(wrapper.text()).toContain("检查更新失败，请稍后重试。");
-    expect(wrapper.text()).not.toContain("网络连接失败，请稍后重试");
-    const retry = wrapper.findAll("button").find((b) => b.text().includes("重试检查"));
-    expect(retry).toBeDefined();
-    await retry!.trigger("click");
-    expect(check).toHaveBeenCalledTimes(1);
-  });
-
-  it("服务器确认无更新时显示已经是最新版本", async () => {
-    phase.value = "up-to-date";
-    info.value = {
-      currentVersion: "0.5.0",
-      available: false,
-      version: null,
-      notes: null,
-      date: null,
-    };
-    const wrapper = mount(SettingsPage, { props: { runtime } });
-    await flushPromises();
-    expect(wrapper.text()).toContain("已经是最新版本。");
-    const installButton = wrapper
-      .findAll("button")
-      .find((b) => b.text().includes("下载并安装"));
-    expect(installButton).toBeUndefined();
   });
 
   it("首次设置：重新运行向导重置进度并通知宿主进入向导", async () => {
@@ -686,7 +521,7 @@ describe("settings page", () => {
     expect(wrapper.text()).toContain("Audio Device");
     expect(wrapper.text()).toContain("Diagnostic Summary");
     expect(wrapper.text()).toContain("Open Log Folder");
-    expect(wrapper.text()).toContain("Feedback");
+    expect(wrapper.text()).not.toContain("Feedback");
     expect(wrapper.text()).not.toContain("让语音触手可及");
     expect(wrapper.text()).not.toContain("诊断与日志");
     expect(wrapper.text()).not.toContain("权限");

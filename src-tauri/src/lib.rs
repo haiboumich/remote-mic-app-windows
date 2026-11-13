@@ -26,17 +26,14 @@ mod app_icon;
 mod button_profiles;
 mod common_phrase_panel;
 mod diagnostics;
-mod launch_state;
 mod membership;
 mod onboarding;
 mod platform;
 mod rc003_task;
-mod recommendations;
 mod settings;
 mod shortcut_icons;
 mod startup;
 mod transcripts;
-mod updater;
 mod usage;
 
 use diagnostics::DiagnosticReport;
@@ -45,14 +42,7 @@ use membership::{
     MembershipRuntime, MembershipSnapshot,
 };
 use platform::PlatformRuntime;
-use recommendations::{
-    go_back_recommendations, hide_recommendations, open_recommendations_website,
-    retry_recommendations, show_recommendations,
-};
 use sayall_core::{AppIconIdentifier, AppLanguage, ThemePreference, VoiceInputTool};
-use updater::{
-    check_app_update, get_app_update_preferences, install_app_update, set_app_update_preferences,
-};
 use usage::{build_usage_profile, UsageProfile, UsageStore, UsageSync};
 
 /// 主窗口标签（`tauri.conf.json` 里由配置创建的唯一窗口）。
@@ -763,12 +753,6 @@ struct AppState {
     /// 启动对账**主动关掉**开关的原因（2026-10-15，issue #264 附加观察甲）：只用于
     /// 界面说明与诊断块，判据只此一处（见 `CaptureRevoke`）。
     capture_revoked: Arc<std::sync::atomic::AtomicU8>,
-    /// check_app_update 暂存的待安装更新（install_app_update 取走）。
-    /// tauri_plugin_updater::Update 未实现 Debug，用手写 impl 只呈现存在性。
-    pending_update: std::sync::Mutex<Option<tauri_plugin_updater::Update>>,
-    /// 本次启动前刚完成更新时的版本号；前端取走一次后清空（对齐 Mac
-    /// `showUpdateCompletedAlert`：只在更新后的第一次启动提示）。
-    update_completed_version: std::sync::Mutex<Option<String>>,
     /// 回眸本地归档（`%LOCALAPPDATA%\SayAll\transcripts\v1`）。
     transcripts: Arc<transcripts::TranscriptStore>,
     /// 回眸「本地 Agent 访问」的授权状态（`%LOCALAPPDATA%\SayAll\mcp\v1`）。
@@ -794,32 +778,6 @@ impl std::fmt::Debug for AppState {
             .field(
                 "capture_revoked",
                 &CaptureRevoke::current(&self.capture_revoked).as_str(),
-            )
-            .field(
-                "pending_update",
-                &if self
-                    .pending_update
-                    .lock()
-                    .map(|u| u.is_some())
-                    .unwrap_or(false)
-                {
-                    "Some"
-                } else {
-                    "None"
-                },
-            )
-            .field(
-                "update_completed_version",
-                &if self
-                    .update_completed_version
-                    .lock()
-                    .map(|v| v.is_some())
-                    .unwrap_or(false)
-                {
-                    "Some"
-                } else {
-                    "None"
-                },
             )
             .finish()
     }
@@ -989,21 +947,9 @@ fn get_membership_environment(state: tauri::State<'_, AppState>) -> bool {
 /// `weixin://`，防止被篡改成文件或脚本协议。
 #[tauri::command]
 async fn open_membership_payment_scheme(
-    app: tauri::AppHandle,
-    state: tauri::State<'_, AppState>,
+    _state: tauri::State<'_, AppState>,
 ) -> Result<(), String> {
-    use tauri_plugin_opener::OpenerExt;
-    let scheme = state
-        .membership
-        .payment_handoff()
-        .and_then(|handoff| handoff.open_scheme)
-        .ok_or_else(|| "no_open_scheme".to_string())?;
-    if !scheme.starts_with("weixin://") || scheme.len() > 2048 {
-        return Err("invalid_handoff_scheme".to_string());
-    }
-    app.opener()
-        .open_url(scheme, None::<&str>)
-        .map_err(|_| "open_membership_scheme_failed".to_string())
+    Err("offline_build_external_actions_disabled".to_string())
 }
 
 /// 丢弃当前支付交接（退出登录、切换方案等）。
@@ -1027,20 +973,9 @@ async fn expire_membership_payment_handoff(
 /// 拒绝 `file:`、`javascript:` 之类的协议。
 #[tauri::command]
 async fn open_membership_checkout(
-    app: tauri::AppHandle,
-    state: tauri::State<'_, AppState>,
+    _state: tauri::State<'_, AppState>,
 ) -> Result<(), String> {
-    use tauri_plugin_opener::OpenerExt;
-    let url = state
-        .membership
-        .checkout_url()
-        .ok_or_else(|| "no_active_order".to_string())?;
-    if !url.starts_with("https://") || url.len() > 2048 {
-        return Err("invalid_checkout_url".to_string());
-    }
-    app.opener()
-        .open_url(url, None::<&str>)
-        .map_err(|_| "open_checkout_failed".to_string())
+    Err("offline_build_external_actions_disabled".to_string())
 }
 
 /// 打开会员页底部的固定说明页（用户协议 / 隐私政策 / 退款政策）。
@@ -1048,21 +983,8 @@ async fn open_membership_checkout(
 /// 与收银台同一条边界：页面只传一个枚举名，URL 由这里写死。这样既不用给
 /// WebView 开任意 URL 的 opener 权限，也不存在页面注入外链的可能。
 #[tauri::command]
-async fn open_membership_link(app: tauri::AppHandle, link: String) -> Result<(), String> {
-    use tauri_plugin_opener::OpenerExt;
-    let url = match link.as_str() {
-        "agreement" => "https://getsayall.com/terms/",
-        "privacy" => "https://getsayall.com/privacy/",
-        "refund" => "https://getsayall.com/refund/",
-        // 大版本说明有独立页面（与 Mac 的「大版本说明」同源）。
-        "version" => "https://getsayall.com/plus-version/",
-        // 键位方案市场使用公开 GitHub 仓库，与 Mac 共用同一入口。
-        "market" => "https://github.com/GetSayAll/sayall-market",
-        _ => return Err("unknown_membership_link".to_string()),
-    };
-    app.opener()
-        .open_url(url, None::<&str>)
-        .map_err(|_| "open_membership_link_failed".to_string())
+async fn open_membership_link(_link: String) -> Result<(), String> {
+    Err("offline_build_external_actions_disabled".to_string())
 }
 
 /// 打开服务端目录状态返回的停售/支持链接。
@@ -1070,14 +992,8 @@ async fn open_membership_link(app: tauri::AppHandle, link: String) -> Result<(),
 /// 只接受 HTTPS；页面不能传 `file:`、`javascript:` 等协议。长度上限与
 /// checkout URL 一致，防止异常超长链接。
 #[tauri::command]
-async fn open_membership_external_url(app: tauri::AppHandle, url: String) -> Result<(), String> {
-    use tauri_plugin_opener::OpenerExt;
-    if !url.starts_with("https://") || url.len() > 2048 {
-        return Err("invalid_membership_url".to_string());
-    }
-    app.opener()
-        .open_url(url, None::<&str>)
-        .map_err(|_| "open_membership_link_failed".to_string())
+async fn open_membership_external_url(_url: String) -> Result<(), String> {
+    Err("offline_build_external_actions_disabled".to_string())
 }
 
 /// 在阻塞线程池上执行一次会员操作。
@@ -4899,32 +4815,6 @@ async fn set_open_window_at_launch(
     result
 }
 
-/// 本次启动前刚完成更新时的版本号；没有则返回 `null`。
-///
-/// 对齐 Mac `showUpdateCompletedAlert`：只在更新后的第一次启动提示一次。
-/// 前端取走后清空——同一次运行里再挂载页面不会重复弹。
-#[tauri::command]
-fn take_update_completed_version(state: tauri::State<'_, AppState>) -> Option<String> {
-    let version = take_pending_update_completed_version(&state.update_completed_version);
-    sayall_windows::gatt_note(format!(
-        "startup feature=update_completed action=take terminal_result=passed available={}",
-        version.is_some()
-    ));
-    version
-}
-
-/// 一次性取走待提示的版本号（纯逻辑，便于单测「只提示一次」）。
-///
-/// 锁中毒时按「没有待提示」处理：更新提示不是功能路径，不能因此阻塞前端。
-fn take_pending_update_completed_version(
-    pending: &std::sync::Mutex<Option<String>>,
-) -> Option<String> {
-    pending
-        .lock()
-        .ok()
-        .and_then(|mut pending_version| pending_version.take())
-}
-
 #[tauri::command]
 fn get_launch_at_login(state: tauri::State<'_, AppState>) -> Result<bool, String> {
     let started = std::time::Instant::now();
@@ -5595,14 +5485,6 @@ pub fn run() {
     }
 
     let builder = tauri::Builder::default()
-        // 主窗口前端用 `openUrl()` 走 opener；**关闭**插件的「自动接管 target=_blank」
-        // 注入脚本：该脚本在任意 WebView 内拦截链接并直接调 IPC，推荐页子 WebView
-        // 不在 ACL 范围内会抛 `Command plugin:opener|open_url not allowed by ACL`，
-        // 用户看到的就是「按钮点了没反应」（2026-10-19 实测）。站外链接改由推荐页
-        // 自己的 `on_new_window` / `on_navigation` 交给系统浏览器。
-        .plugin(tauri_plugin_opener::Builder::new().open_js_links_on_click(false).build())
-        // 应用内更新（GitHub Releases 静态 latest.json + minisign 验签）。
-        .plugin(tauri_plugin_updater::Builder::new().build())
         .on_page_load(|webview, payload| {
             let phase = match payload.event() {
                 tauri::webview::PageLoadEvent::Started => "started",
@@ -5736,32 +5618,8 @@ pub fn run() {
             #[cfg(windows)]
             apply_native_language(app.handle(), saved_settings.application_language);
 
-            // 「本次启动前刚完成更新」（2026-10-19，对齐 Mac
-            // `recordLaunchAndDetectCompletedUpdate`）：记录写在独立的
-            // `launch-state.json`（不碰 settings.json，安装生命周期测试对后者做逐字节
-            // 哈希断言）。读取/写入失败都只记日志、按「不算更新」继续，不阻断启动。
-            let completed_update = match launch_state::record_launch(
-                &launch_settings_path,
-                &app.package_info().version.to_string(),
-                onboarding::install_evidence_exists(&launch_settings_path),
-            ) {
-                Ok(outcome) => {
-                    sayall_windows::gatt_note(format!(
-                        "startup feature=completed_update action=decide terminal_result=passed completed={} previous_version={} current_version={}",
-                        outcome.completed_update,
-                        outcome.previous_version.as_deref().unwrap_or("none"),
-                        outcome.current_version
-                    ));
-                    outcome.completed_update
-                }
-                Err(error) => {
-                    sayall_windows::gatt_note(
-                        "startup feature=completed_update action=decide terminal_result=failed error_domain=settings error_code=launch_state_io reason=treated_as_regular_launch retryable=true".to_owned(),
-                    );
-                    eprintln!("{error}");
-                    false
-                }
-            };
+            // 离线构建没有应用内更新，因此启动可见性不再为“更新完成”例外。
+            let completed_update = false;
 
             // 启动可见性（2026-10-19 用户定稿，对齐 Mac `OnboardingLaunchPolicy`）：
             // 「启动时自动打开主面板」关闭后，普通启动只驻留托盘；未完成首次设置
@@ -6268,14 +6126,9 @@ pub fn run() {
                 capture_unavailable,
                 membership: membership_runtime,
                 capture_revoked,
-                pending_update: std::sync::Mutex::new(None),
-                update_completed_version: std::sync::Mutex::new(
-                    completed_update.then(|| app.package_info().version.to_string()),
-                ),
                 transcripts: transcript_store,
                 agent_access: agent_access_store,
             });
-            app.manage(recommendations::RecommendationsState::default());
             // 按键宿主进程（切片 1：骨架/握手/生命周期；钩子迁移见后续切片）：
             // 失败仅记录日志并保持 fail-open，不阻塞启动。
             let _ = sayall_windows::key_host::start_global();
@@ -6382,15 +6235,6 @@ pub fn run() {
                         state.platform.align_ime_after_tool_selection();
                     }
                 }
-            } else if window.label() == "main"
-                && matches!(
-                    event,
-                    tauri::WindowEvent::Resized(_) | tauri::WindowEvent::ScaleFactorChanged { .. }
-                )
-            {
-                // 推荐页子 WebView 的位置/尺寸不是 CSS 布局的一部分；窗口缩放和
-                // 跨屏 DPI 变化后按固定侧栏宽度重新贴边（页面未显示时是 no-op）。
-                recommendations::relayout(window.app_handle());
             }
         });
 
@@ -6424,11 +6268,6 @@ pub fn run() {
         open_windows_settings,
         hide_main_window,
         hide_main_window_from_title_bar,
-        show_recommendations,
-        retry_recommendations,
-        hide_recommendations,
-        open_recommendations_website,
-        go_back_recommendations,
         scan_paired_remotes,
         get_connection_snapshot,
         connect_remote,
@@ -6528,14 +6367,9 @@ pub fn run() {
         set_launch_at_login,
         get_open_window_at_launch,
         set_open_window_at_launch,
-        take_update_completed_version,
         report_theme_result,
         get_app_icon,
         set_app_icon,
-        get_app_update_preferences,
-        set_app_update_preferences,
-        check_app_update,
-        install_app_update,
         report_frontend_event,
         run_runtime_simulation_voice_session,
         get_runtime_simulation_options,
@@ -6571,11 +6405,6 @@ pub fn run() {
         open_windows_settings,
         hide_main_window,
         hide_main_window_from_title_bar,
-        show_recommendations,
-        retry_recommendations,
-        hide_recommendations,
-        open_recommendations_website,
-        go_back_recommendations,
         scan_paired_remotes,
         get_connection_snapshot,
         connect_remote,
@@ -6675,14 +6504,9 @@ pub fn run() {
         set_launch_at_login,
         get_open_window_at_launch,
         set_open_window_at_launch,
-        take_update_completed_version,
         report_theme_result,
         get_app_icon,
         set_app_icon,
-        get_app_update_preferences,
-        set_app_update_preferences,
-        check_app_update,
-        install_app_update,
         report_frontend_event
     ]);
 
@@ -6805,24 +6629,6 @@ mod tests {
         assert!(!should_show_main_window_on_startup(false, false, false));
         // 已完成向导 + 本次启动前刚完成更新：开关关着也必须显示（Mac 同款）。
         assert!(should_show_main_window_on_startup(false, true, false));
-    }
-
-    #[test]
-    fn update_completed_version_is_taken_once() {
-        let pending = std::sync::Mutex::new(Some("1.0.0".to_owned()));
-
-        // 第一次取走：返回版本号并清空。
-        assert_eq!(
-            take_pending_update_completed_version(&pending),
-            Some("1.0.0".to_owned())
-        );
-        // 同一次运行里再挂载页面不会再弹（对齐 Mac 的「只提示一次」）。
-        assert_eq!(take_pending_update_completed_version(&pending), None);
-        // 普通启动（没有更新完成）永远是 None，不编造版本号。
-        assert_eq!(
-            take_pending_update_completed_version(&std::sync::Mutex::new(None)),
-            None
-        );
     }
 
     #[test]

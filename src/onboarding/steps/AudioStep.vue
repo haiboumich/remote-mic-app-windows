@@ -14,7 +14,6 @@ const props = defineProps<{
   scanning: boolean;
   message: string;
   selectingEndpointId: string;
-  openingVbCablePage: boolean;
   /** 当前门禁失败码（只用于显示修复卡；判据仍由 flow.evaluateGate 独裁）。 */
   gateCode: string | null;
 }>();
@@ -22,7 +21,6 @@ const props = defineProps<{
 defineEmits<{
   select: [endpoint: AudioEndpoint];
   refresh: [];
-  openDownload: [];
 }>();
 
 const recommended = computed(() => props.endpoints.filter(isRecommendedVoiceEndpoint));
@@ -61,14 +59,6 @@ const fixTitle = computed(() => {
         </li>
       </ul>
       <div class="onboarding-chips">
-        <button
-          class="onboarding-chip strong"
-          type="button"
-          :disabled="openingVbCablePage"
-          @click="$emit('openDownload')"
-        >
-          {{ openingVbCablePage ? t("正在打开…") : t("打开官方下载页") }}
-        </button>
         <button class="onboarding-chip" type="button" :disabled="scanning" @click="$emit('refresh')">
           {{ scanning ? t("正在检测…") : t("重新检测") }}
         </button>

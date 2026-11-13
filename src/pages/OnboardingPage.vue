@@ -22,8 +22,6 @@ import {
   isRecommendedVoiceEndpoint,
   launchVokie,
   listAudioEndpoints,
-  openVbCableDownloadPage,
-  openVokieHomepage,
   openWindowsSettings,
   saveOnboardingStep,
   scanPairedRemotes,
@@ -185,7 +183,6 @@ const audioSnapshot = ref<AudioSnapshot | null>(null);
 const scanningAudio = ref(false);
 const audioMessage = ref("");
 const selectingEndpointId = ref("");
-const openingVbCablePage = ref(false);
 
 // ---- 输入工具步骤 ----
 const stagedTool = ref<VoiceInputTool | null>(null);
@@ -965,27 +962,6 @@ async function chooseEndpoint(endpoint: AudioEndpoint, automatic = false): Promi
   }
 }
 
-async function openDownloadPage(): Promise<void> {
-  openingVbCablePage.value = true;
-  const started = performance.now();
-  reportStepAction("audio", "open_download_page", "unknown");
-  try {
-    await openVbCableDownloadPage();
-    audioMessage.value = t("已打开官方下载页；安装需要管理员权限，完成后请重启电脑");
-    reportStepAction("audio", "open_download_page", "passed", {
-      elapsedMs: actionElapsed(started),
-    });
-  } catch (error) {
-    logRawError("open_download_page", error);
-    audioMessage.value = t("无法打开下载页，请重试。");
-    reportStepAction("audio", "open_download_page", "failed", {
-      elapsedMs: actionElapsed(started),
-    });
-  } finally {
-    openingVbCablePage.value = false;
-  }
-}
-
 // ---- 全按键支持步骤（可选增强）----
 
 /**
@@ -1283,24 +1259,6 @@ async function refreshVokieState(): Promise<void> {
     logRawError("vokie_detect", error);
     toolMessage.value = t("读取 Vokie 状态失败，请重试。");
     reportStepAction("voice_tool", "vokie_detect", "failed", {
-      elapsedMs: actionElapsed(started),
-    });
-  }
-}
-
-async function openVokieSite(): Promise<void> {
-  const started = performance.now();
-  reportStepAction("voice_tool", "open_vokie_site", "unknown");
-  try {
-    await openVokieHomepage();
-    toolMessage.value = t("已打开 Vokie 官网；安装后回来点「重新检测」。");
-    reportStepAction("voice_tool", "open_vokie_site", "passed", {
-      elapsedMs: actionElapsed(started),
-    });
-  } catch (error) {
-    logRawError("open_vokie_site", error);
-    toolMessage.value = t("无法打开 Vokie 官网，请重试。");
-    reportStepAction("voice_tool", "open_vokie_site", "failed", {
       elapsedMs: actionElapsed(started),
     });
   }
@@ -2297,11 +2255,9 @@ async function retryVoiceTest(): Promise<void> {
             :scanning="scanningAudio"
             :message="audioMessage"
             :selecting-endpoint-id="selectingEndpointId"
-            :opening-vb-cable-page="openingVbCablePage"
             :gate-code="gate.code"
             @select="chooseEndpoint"
             @refresh="refreshAudioDevices(false)"
-            @open-download="openDownloadPage"
           />
           <VoiceToolStep
             v-else-if="step === 'voice_tool'"
@@ -2317,7 +2273,6 @@ async function retryVoiceTest(): Promise<void> {
             :message="toolMessage"
             @select-tool="selectTool"
             @toggle-capture="requestCaptureToggle"
-            @open-vokie-site="openVokieSite"
             @launch-vokie="launchVokieApp"
             @refresh-vokie="refreshVokieState"
             @choose-other-keys="chooseOtherKeys"

@@ -5,7 +5,6 @@ import { privateFeaturePages, type PrivateFeaturePage } from "./private/feature-
 export type PageId =
   | "buttons"
   | "apps"
-  | "recommendations"
   | "macros"
   | "connection"
   | "reflections"
@@ -15,7 +14,6 @@ export type PageId =
 export type NavIcon =
   | "keyboard"
   | "apps"
-  | "sparkles"
   | "layers"
   | "link"
   | "shield"
@@ -51,8 +49,6 @@ export const publicNavigationItems: NavigationItem[] = [
   ...(COMBINATION_ACTIONS_ENABLED
     ? [{ id: "macros", label: "组合动作", icon: "layers" } as NavigationItem]
     : []),
-  // 2026-10-25 用户指定：推荐放在连接上方（对齐 Mac）。
-  { id: "recommendations", label: "推荐", icon: "sparkles" },
   { id: "connection", label: "连接", icon: "link" },
   // 2026-10-25 用户指定：回眸紧挨设置上方。
   { id: "reflections", label: "回眸", icon: "textbubble" },

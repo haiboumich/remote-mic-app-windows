@@ -106,20 +106,12 @@ describe("品牌字体（Oxanium SemiBold）", () => {
 });
 
 // 2026-11-06：Mac origin/main 的侧栏宽度按内容测量（104...136），当前品牌区
-// 自然宽度为 130，且不再画右边框。CSS 与推荐页子 WebView 的偏移必须同源，
-// 否则推荐页会盖住侧栏或留下空隙。
-describe("侧栏宽度与推荐页偏移同步", () => {
+// 自然宽度为 130，且不再画右边框。
+describe("侧栏宽度", () => {
   it("CSS 侧栏列宽为 130px", () => {
     expect(css).toMatch(/\.app-shell\s*\{[^}]*grid-template-columns:\s*130px/);
   });
 
-  it("推荐页子 WebView 使用同一个 130px 偏移", () => {
-    const rust = readFileSync(
-      join(process.cwd(), "src-tauri", "src", "recommendations.rs"),
-      "utf8",
-    );
-    expect(rust).toMatch(/const SIDEBAR_WIDTH:\s*f64\s*=\s*130\.0;/);
-  });
 });
 
 // 2026-11-06 Andy：标题栏颜色与侧栏始终一致，去掉标题栏 logo/文字；侧栏高度、
@@ -175,18 +167,6 @@ describe("自定义标题栏与 Mac 侧栏尺寸", () => {
     );
   });
 
-  it("推荐页子 WebView 让出标题栏高度", () => {
-    const rust = readFileSync(
-      join(process.cwd(), "src-tauri", "src", "recommendations.rs"),
-      "utf8",
-    );
-    expect(rust).toMatch(/const TITLEBAR_HEIGHT:\s*f64\s*=\s*32\.0;/);
-    expect(rust).toMatch(/const CONTENT_GAP:\s*f64\s*=\s*8\.0;/);
-    expect(rust).toMatch(/let content_top = TITLEBAR_HEIGHT \+ top;/);
-    expect(rust).toMatch(/LogicalPosition::new\(SIDEBAR_WIDTH, content_top\)/);
-    expect(rust).toMatch(/size\.width - SIDEBAR_WIDTH - CONTENT_GAP/);
-    expect(rust).toMatch(/size\.height - content_top - CONTENT_GAP/);
-  });
 });
 
 describe("回眸与组合动作卡片跟随设置页材质", () => {

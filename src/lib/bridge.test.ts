@@ -1,5 +1,4 @@
 import { invoke } from "@tauri-apps/api/core";
-import { openUrl } from "@tauri-apps/plugin-opener";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   actionSummary,
@@ -9,7 +8,6 @@ import {
   chordLabel,
   connectionPhaseLabel,
   formatDiagnosticReport,
-  GITHUB_REPOSITORY_URL,
   getApplicationLanguage,
   getOpenWindowAtLaunch,
   identityShortcutByButton,
@@ -17,29 +15,16 @@ import {
   isKnownButtonAction,
   isRecommendedVoiceEndpoint,
   latestMacroDefinitions,
-  OFFICIAL_WEBSITE_URL,
   openAppLabel,
-  openGitHubRepository,
   openLogDirectory,
-  openOfficialWebsite,
-  openRecommendationsWebsite,
-  openVbCableDownloadPage,
   registerCommonPhraseAvailability,
   registerPresetAppNames,
   clearPresetAppNames,
-  RECOMMENDATIONS_URL,
   remoteModelLabel,
   saveApplicationLanguage,
   setAppIcon,
   setOpenWindowAtLaunch,
-  SHARE_WEBSITE_URL,
   shortcutCapability,
-  showRecommendationsPage,
-  hideRecommendationsPage,
-  retryRecommendationsPage,
-  goBackRecommendationsPage,
-  takeUpdateCompletedVersion,
-  VB_CABLE_DOWNLOAD_URL,
   type AudioPhase,
   type ButtonAction,
   type ConnectionPhase,
@@ -47,16 +32,11 @@ import {
 } from "./bridge";
 
 vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn() }));
-vi.mock("@tauri-apps/plugin-opener", () => ({ openUrl: vi.fn() }));
 
-describe("sharing and app icon sync", () => {
+describe("app icon sync", () => {
   afterEach(() => {
     delete (window as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__;
     vi.mocked(invoke).mockReset();
-  });
-
-  it("uses the same fixed share URL encoded in the QR asset", () => {
-    expect(SHARE_WEBSITE_URL).toBe("https://sayall.app/?from=win_share");
   });
 
   it("notifies the shell immediately after the app icon is applied", async () => {
@@ -73,7 +53,6 @@ describe("sharing and app icon sync", () => {
     window.removeEventListener(APP_ICON_CHANGED_EVENT, listener);
   });
 });
-
 describe("mouse actions", () => {
   it("summarizes clicks, movement, and wheel amounts", () => {
     expect(actionSummary({ type: "scroll", direction: "down", steps: 5 })).toBe("滚轮向下 5 格");
@@ -154,21 +133,7 @@ describe("open application labels", () => {
     clearPresetAppNames();
   });
 
-  it("restores preset names from the local first-frame cache on module load", async () => {
-    localStorage.setItem(
-      "sayall.preset-app-names.v1",
-      JSON.stringify([["netease_music", "网易云音乐"]]),
-    );
-    vi.resetModules();
-    const fresh = await import("./bridge");
-    expect(fresh.actionSummary({ type: "open_app", target: "netease_music" })).toBe(
-      "打开网易云音乐",
-    );
-    localStorage.clear();
-    clearPresetAppNames();
-  });
 });
-
 describe("learning input bridge", () => {
   afterEach(() => {
     delete (window as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__;
@@ -406,138 +371,6 @@ describe("diagnostic report presentation", () => {
   });
 });
 
-describe("VB-CABLE download guidance", () => {
-  it("opens only the official VB-Audio page in browser preview", async () => {
-    const open = vi.spyOn(window, "open").mockImplementation(() => null);
-
-    await openVbCableDownloadPage();
-
-    expect(open).toHaveBeenCalledWith(VB_CABLE_DOWNLOAD_URL, "_blank", "noopener,noreferrer");
-    open.mockRestore();
-  });
-});
-
-describe("设置页外部入口（官网 / GitHub）", () => {
-  afterEach(() => {
-    delete (window as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__;
-    vi.mocked(openUrl).mockReset();
-  });
-
-  it("指向已确认的官网与 Windows 仓库地址", () => {
-    // 2026-10-02 用户指定：官网入口带 `?from=win` 来源标记，便于官网区分来客。
-    expect(OFFICIAL_WEBSITE_URL).toBe("https://sayall.app/?from=win");
-    expect(GITHUB_REPOSITORY_URL).toBe("https://github.com/GetSayAll/remote-mic-app-windows");
-  });
-
-  it("浏览器预览下用新标签打开，不调用 Tauri opener", async () => {
-    const open = vi.spyOn(window, "open").mockImplementation(() => null);
-
-    await openOfficialWebsite();
-    await openGitHubRepository();
-
-    expect(open).toHaveBeenNthCalledWith(1, OFFICIAL_WEBSITE_URL, "_blank", "noopener,noreferrer");
-    expect(open).toHaveBeenNthCalledWith(2, GITHUB_REPOSITORY_URL, "_blank", "noopener,noreferrer");
-    expect(openUrl).not.toHaveBeenCalled();
-    open.mockRestore();
-  });
-
-  it("Tauri 运行时交给 opener 插件，地址必须与 capability 白名单逐字一致", async () => {
-    (window as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__ = {};
-    vi.mocked(openUrl).mockResolvedValue(undefined);
-
-    await openOfficialWebsite();
-    await openGitHubRepository();
-
-    // 传出的字符串与 src-tauri/capabilities/default.json 的 allow 列表是同一份
-    // 契约：多一个字符、少一个尾斜杠都会被插件判为 ForbiddenUrl。
-    expect(vi.mocked(openUrl).mock.calls.map(([url]) => url)).toEqual([
-      OFFICIAL_WEBSITE_URL,
-      GITHUB_REPOSITORY_URL,
-    ]);
-  });
-});
-
-describe("推荐页入口（官网页面宿主）", () => {
-  afterEach(() => {
-    delete (window as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__;
-    vi.mocked(invoke).mockReset();
-    vi.mocked(openUrl).mockReset();
-  });
-
-  it("只指向官网推荐页，不在客户端保存推荐内容", () => {
-    expect(RECOMMENDATIONS_URL).toBe("https://sayall.app/recommendations/");
-  });
-
-  it("浏览器预览下明确不可用，并可直接打开官网", async () => {
-    const open = vi.spyOn(window, "open").mockImplementation(() => null);
-
-    await expect(showRecommendationsPage("light")).rejects.toThrow(
-      "当前是浏览器预览，无法在应用内打开推荐页面",
-    );
-    await openRecommendationsWebsite();
-
-    expect(open).toHaveBeenCalledWith(
-      RECOMMENDATIONS_URL,
-      "_blank",
-      "noopener,noreferrer",
-    );
-    expect(invoke).not.toHaveBeenCalled();
-    open.mockRestore();
-  });
-
-  it("Tauri 运行时按精确命令名调用 Rust，并回传本次加载 generation", async () => {
-    (window as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__ = {};
-    vi.mocked(invoke)
-      .mockResolvedValueOnce(7)
-      .mockResolvedValueOnce(8)
-      .mockResolvedValueOnce(undefined)
-      .mockResolvedValueOnce(undefined)
-      .mockResolvedValueOnce(undefined);
-
-    await expect(showRecommendationsPage("dark", "en")).resolves.toBe(7);
-    await expect(retryRecommendationsPage("light", "zh-Hans")).resolves.toBe(8);
-    await hideRecommendationsPage();
-    await openRecommendationsWebsite();
-    await goBackRecommendationsPage();
-
-    expect(vi.mocked(invoke).mock.calls).toEqual([
-      ["show_recommendations", { theme: "dark", language: "en" }],
-      ["retry_recommendations", { theme: "light", language: "zh-Hans" }],
-      ["hide_recommendations"],
-      ["open_recommendations_website"],
-      ["go_back_recommendations"],
-    ]);
-  });
-
-  it("应用语言按 system / zh-Hans / en 原样走 Rust", async () => {
-    (window as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__ = {};
-    vi.mocked(invoke)
-      .mockResolvedValueOnce("en")
-      .mockResolvedValueOnce("zh-Hans");
-
-    await expect(getApplicationLanguage("language-1")).resolves.toBe("en");
-    await expect(
-      saveApplicationLanguage("zh-Hans", "language-1"),
-    ).resolves.toBe("zh-Hans");
-
-    expect(vi.mocked(invoke).mock.calls).toEqual([
-      ["get_application_language", { operationId: "language-1" }],
-      ["set_application_language", { language: "zh-Hans", operationId: "language-1" }],
-    ]);
-  });
-
-  it("英文浏览器预览打开英文推荐页", async () => {
-    const open = vi.spyOn(window, "open").mockImplementation(() => null);
-    await openRecommendationsWebsite("en");
-    expect(open).toHaveBeenCalledWith(
-      "https://sayall.app/en/recommendations/",
-      "_blank",
-      "noopener,noreferrer",
-    );
-    open.mockRestore();
-  });
-});
-
 describe("组合动作：同一条动作只保留最新版本（2026-10-15 现场回归）", () => {
   const make = (macroId: string, version: string, name: string) => ({
     schemaVersion: "0.1",
@@ -603,7 +436,6 @@ describe("诊断日志目录入口", () => {
     expect(invoke).not.toHaveBeenCalled();
   });
 });
-
 describe("启动时自动打开主面板（设置页「启动行为」）", () => {
   afterEach(() => {
     delete (window as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__;
@@ -635,25 +467,5 @@ describe("启动时自动打开主面板（设置页「启动行为」）", () =
       "当前是浏览器预览，无法设置启动时打开主面板",
     );
     expect(invoke).not.toHaveBeenCalled();
-  });
-});
-
-describe("更新完成提示（对齐 Mac `update.completed.*`）", () => {
-  afterEach(() => {
-    delete (window as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__;
-    vi.mocked(invoke).mockReset();
-  });
-
-  it("浏览器预览没有更新机制，返回 null 且不调 IPC", async () => {
-    await expect(takeUpdateCompletedVersion()).resolves.toBeNull();
-    expect(invoke).not.toHaveBeenCalled();
-  });
-
-  it("Tauri 运行时使用精确命令名", async () => {
-    (window as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__ = {};
-    vi.mocked(invoke).mockResolvedValue("1.0.0");
-
-    await expect(takeUpdateCompletedVersion()).resolves.toBe("1.0.0");
-    expect(invoke).toHaveBeenCalledWith("take_update_completed_version");
   });
 });

@@ -3,7 +3,6 @@ import type { Component } from "vue";
 import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import Sidebar from "./components/Sidebar.vue";
 import WindowTitleBar from "./components/WindowTitleBar.vue";
-import UpdateCompletedDialog from "./components/UpdateCompletedDialog.vue";
 import {
   APP_ICON_CHANGED_EVENT,
   getAppIcon,
@@ -11,13 +10,11 @@ import {
   getOnboardingState,
   getRuntimeSnapshot,
   hideMainWindow,
-  takeUpdateCompletedVersion,
   type AppIconIdentifier,
   type RuntimeSnapshot,
 } from "./lib/bridge";
 import { profileAccountLabel } from "./lib/profile";
 import { reportFrontendEvent } from "./lib/frontend-diagnostics";
-import { useAppUpdate } from "./lib/app-update";
 import { ONBOARDING_WIZARD_ENABLED } from "./lib/feature-flags";
 import { t } from "./lib/i18n";
 import { privatePageComponents } from "./private/feature-pages";
@@ -36,7 +33,6 @@ import ButtonsPage from "./pages/ButtonsPage.vue";
 import ConnectionPage from "./pages/ConnectionPage.vue";
 import MacrosPage from "./pages/MacrosPage.vue";
 import OnboardingPage from "./pages/OnboardingPage.vue";
-import RecommendationsPage from "./pages/RecommendationsPage.vue";
 import ReflectionsPage from "./pages/ReflectionsPage.vue";
 import ProfilePage from "./pages/ProfilePage.vue";
 
@@ -62,9 +58,7 @@ watch(activePage, (page) => {
 });
 const runtime = ref<RuntimeSnapshot | null>(null);
 const loadError = ref("");
-const { bannerVisible, info: updateInfo, dismissBanner, runStartupSilentCheck } = useAppUpdate();
 let runtimePollTimer: ReturnType<typeof setInterval> | undefined;
-let updateCheckTimer: ReturnType<typeof setTimeout> | undefined;
 let profileLabelTimer: ReturnType<typeof setInterval> | undefined;
 let initialRuntimeReported = false;
 
@@ -102,13 +96,6 @@ function onAppIconChanged(event: Event): void {
 
 /** 未完成首次设置时进入向导（激活开关见 ONBOARDING_WIZARD_ENABLED）。 */
 const showOnboarding = ref(false);
-
-/**
- * 「无线麦已更新」（2026-10-19，对齐 Mac `showUpdateCompletedAlert`）：
- * 本次启动前刚完成更新时，版本号由 Rust 取走（取走即清空）并在这里提示一次。
- * 读取失败不打扰用户——更新提示不是功能路径。
- */
-const updateCompletedVersion = ref<string | null>(null);
 
 /**
  * 运行时仿真冒烟（构建期 `VITE_SAYALL_RUNTIME_SIMULATION=1`）跑的是**主界面**旅程
@@ -156,7 +143,6 @@ function handleWindowKeydown(event: KeyboardEvent): void {
 const pageComponents: Record<string, Component> = {
   buttons: ButtonsPage,
   apps: AppsPage,
-  recommendations: RecommendationsPage,
   macros: MacrosPage,
   connection: ConnectionPage,
   reflections: ReflectionsPage,
@@ -190,19 +176,6 @@ const activePageProps = computed(() => {
  * 要常驻必须先逐页补 onDeactivated 清理（Bugs/2026-11-06-sidebar-switch-label-refresh.md）。
  */
 const cachedPageNames = ["ProfilePage"];
-
-// 横幅不在"设置"页重复显示（页面内已有完整更新面板）；推荐页由原生子 WebView
-// 覆盖内容区，横幅即使渲染也看不到，直接跳过。
-const updateBannerVisible = computed(
-  () =>
-    bannerVisible.value &&
-    activePage.value !== "settings" &&
-    activePage.value !== "recommendations",
-);
-
-function showUpdatePage(): void {
-  activePage.value = "settings";
-}
 
 onMounted(async () => {
   const refreshRuntime = async () => {
@@ -263,16 +236,6 @@ onMounted(async () => {
       });
     }
   }
-  // 更新完成提示（对齐 Mac `showUpdateCompletedAlert`）：只在「本次启动前刚完成更新」
-  // 时出现一次。Mac 在窗口显示后立即弹（向导未完成时同样弹），这里也照做；
-  // 版本号由 Rust 取走即清空，所以重载页面不会重复弹。
-  if (!runtimeSimulationBuild) {
-    void takeUpdateCompletedVersion()
-      .then((version) => {
-        if (version) updateCompletedVersion.value = version;
-      })
-      .catch(() => undefined);
-  }
   await refreshRuntime();
   void refreshProfileLabel();
   void refreshAppIcon();
@@ -283,16 +246,10 @@ onMounted(async () => {
     void refreshProfileLabel();
     void refreshAppIcon();
   }, 5_000);
-  // 启动静默检查更新：延迟 3 秒避开 BLE 恢复/设置加载的启动高峰；
-  // 失败完全无声（app-update.ts 内回落 idle，不打扰主功能）。
-  updateCheckTimer = setTimeout(() => {
-    void runStartupSilentCheck();
-  }, 3_000);
 });
 
 onUnmounted(() => {
   if (runtimePollTimer) clearInterval(runtimePollTimer);
-  if (updateCheckTimer) clearTimeout(updateCheckTimer);
   if (profileLabelTimer) clearInterval(profileLabelTimer);
   window.removeEventListener("keydown", handleWindowKeydown, true);
   window.removeEventListener(APP_ICON_CHANGED_EVENT, onAppIconChanged);
@@ -318,13 +275,6 @@ onUnmounted(() => {
       />
       <main class="content">
         <div v-if="loadError" class="error-banner">{{ t(loadError) }}</div>
-        <div v-if="updateBannerVisible" class="update-banner">
-          <span>{{ t("发现新版本 {version}", { version: updateInfo?.version ?? "" }) }}</span>
-          <button type="button" class="link-button" @click="showUpdatePage">{{ t("查看") }}</button>
-          <button type="button" class="link-button" :aria-label="t('忽略此提醒')" @click="dismissBanner">
-            ×
-          </button>
-        </div>
         <KeepAlive :include="cachedPageNames">
           <component
             :is="activeComponent"
@@ -335,10 +285,5 @@ onUnmounted(() => {
         </KeepAlive>
       </main>
     </div>
-    <UpdateCompletedDialog
-      v-if="updateCompletedVersion"
-      :version="updateCompletedVersion"
-      @close="updateCompletedVersion = null"
-    />
   </div>
 </template>

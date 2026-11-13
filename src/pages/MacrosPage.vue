@@ -187,7 +187,6 @@ const ACTION_ORDER: MacroAction[] = [
   "focus_frontmost",
   "focus_input",
   "wait_for_application",
-  "open_url",
   "run_macro",
 ];
 
@@ -521,8 +520,9 @@ function defaultParameters(action: MacroAction): MacroStep["parameters"] {
       return {};
     case "system_action":
       return {};
+    // 仅兼容旧配置的反序列化；动作选择器不再提供此项，运行时也会拒绝执行。
     case "open_url":
-      return { url: "https://" };
+      return {};
     case "run_macro":
       return {};
   }
@@ -926,10 +926,6 @@ function stepConfigurationIssue(step: MacroStep): string | null {
       return parameters.target?.trim() ? null : t("还没有选择目标 App");
     case "focus_frontmost":
       return null;
-    case "open_url":
-      return /^https?:\/\/\S+/i.test(parameters.url ?? "")
-        ? null
-        : t("网址需要以 http:// 或 https:// 开头");
     case "run_macro":
       return parameters.nestedMacroId ? null : t("还没有选择要执行的组合动作");
     default:
@@ -1854,26 +1850,6 @@ watch(
                       {{ t("去配置") }}
                     </button>
                   </div>
-                </div>
-
-                <!-- 打开网址 -->
-                <div
-                  v-else-if="draft.steps[selectedStepIndex].action === 'open_url'"
-                  class="step-card-body"
-                >
-                  <label class="field">
-                    <span class="field-label">{{ t("网址") }}</span>
-                    <input
-                      class="text-input"
-                      type="url"
-                      :value="draft.steps[selectedStepIndex].parameters.url ?? ''"
-                      :placeholder="t('输入完整网址，例如 https://www.example.com')"
-                      @input="updateSelectedStep((step) => { step.parameters.url = ($event.target as HTMLInputElement).value; })"
-                    />
-                  </label>
-                  <span class="field-hint">
-                    {{ t("会用默认浏览器打开。只能打开普通网页，不能打开电脑里的文件或 App 内的特殊页面。") }}
-                  </span>
                 </div>
 
                 <!-- 执行已有组合动作 -->

@@ -69,14 +69,6 @@ const ICON_PATHS: Record<NavIcon, { strokes: string[]; fills?: string[] }> = {
       "M14.6 13h4.8a1.6 1.6 0 0 1 1.6 1.6v4.8a1.6 1.6 0 0 1-1.6 1.6h-4.8a1.6 1.6 0 0 1-1.6-1.6v-4.8a1.6 1.6 0 0 1 1.6-1.6z",
     ],
   },
-  sparkles: {
-    // SF "sparkles"：一颗大四角星 + 两颗小星，语义对齐 Mac 推荐入口。
-    strokes: [
-      "M11.2 3.6l1.6 5.1 5.1 1.6-5.1 1.6-1.6 5.1-1.6-5.1-5.1-1.6 5.1-1.6z",
-      "M18.6 3.2v3M17.1 4.7h3",
-      "M5.2 17.6v2.8M3.8 19h2.8",
-    ],
-  },
   layers: {
     // SF "square.stack.3d.up"：层叠方块（组合动作；对齐 Mac 侧边栏图标）
     strokes: [

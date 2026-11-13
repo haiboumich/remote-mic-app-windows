@@ -38,9 +38,7 @@ describe("sidebar", () => {
       "按键",
       // 2026-11-09：APP 适配紧跟在按键之后（对齐 Mac）。
       "APP 适配",
-      // 2026-10-25 用户指定：推荐放在连接上方。
       "组合动作",
-      "推荐",
       "连接",
       "回眸",
       "设置",
@@ -48,18 +46,15 @@ describe("sidebar", () => {
     ]);
     // APP 适配入口使用四宫格图标（对齐 Mac square.grid.2x2）。
     expect(items[1].get("svg").findAll("path")).toHaveLength(4);
-    // 推荐入口使用 Mac 的 sparkles 语义图标（大四角星 + 两颗小星）。
-    const recommendationIcon = items[3].get("svg");
-    expect(recommendationIcon.findAll("path")).toHaveLength(3);
     // 回眸入口使用 SF text.bubble.fill 的实心气泡 + 镂空文字；紧挨设置上方。
-    expect(items[5].text()).toBe("回眸");
-    const bubblePaths = items[5].get("svg").findAll("path");
+    expect(items[4].text()).toBe("回眸");
+    const bubblePaths = items[4].get("svg").findAll("path");
     expect(bubblePaths).toHaveLength(1);
     expect(bubblePaths[0].attributes("fill")).toBe("currentColor");
     expect(bubblePaths[0].attributes("fill-rule")).toBe("evenodd");
     // 组合动作入口使用层叠方块图标（3 条描边）。
     expect(items[2].get("svg").findAll("path")).toHaveLength(3);
-    const settingsIcon = items[6].get("svg");
+    const settingsIcon = items[5].get("svg");
     // 齿轮形状：外圈齿形 + 中央圆孔（区别于旧「关于」的 info.circle 单圆）。
     const paths = settingsIcon.findAll("path");
     expect(paths).toHaveLength(2);
@@ -143,7 +138,6 @@ describe("sidebar", () => {
       "Buttons",
       "Apps",
       "Routines",
-      "Picks",
       "Connection",
       "Reflections",
       "Settings",
@@ -157,7 +151,6 @@ describe("sidebar", () => {
       "Buttons",
       "Apps",
       "Routines",
-      "Picks",
       "Connection",
       "Reflections",
       "Settings",

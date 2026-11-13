@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from "vue";
+import { computed, onMounted, ref } from "vue";
 import type {
   AppIconIdentifier,
   AppLanguagePreference,
@@ -17,7 +17,6 @@ import {
 } from "../lib/bridge";
 import DiagnosticsSection from "./settings/DiagnosticsSection.vue";
 import PermissionsSection from "./settings/PermissionsSection.vue";
-import { appUpdateProgressText, useAppUpdate } from "../lib/app-update";
 import { useTheme } from "../lib/theme";
 import { useLanguage } from "../lib/language";
 import { effectiveLanguage } from "../lib/language-state";
@@ -26,19 +25,6 @@ import { t, tPage } from "../lib/i18n";
 const props = defineProps<{ runtime: RuntimeSnapshot | null }>();
 const emit = defineEmits<{ "restart-onboarding": [] }>();
 
-const {
-  phase,
-  info,
-  errorMessage,
-  progress,
-  includePrereleases,
-  preferenceBusy,
-  preferenceError,
-  check,
-  install,
-  loadUpdatePreferences,
-  setIncludePrereleases,
-} = useAppUpdate();
 const {
   preference: themePreference,
   busy: themeBusy,
@@ -78,49 +64,6 @@ const version = computed(() => props.runtime?.appVersion ?? "—");
  * 本页标题分别走 `nav.*` / `page.*` 词表。
  */
 const pageTitle = computed(() => tPage("设置"));
-
-const checking = computed(() => phase.value === "checking");
-const installing = computed(() => phase.value === "downloading" || phase.value === "installing");
-const canCheck = computed(() => !checking.value && !installing.value);
-const updateAvailable = computed(() => phase.value === "available" && info.value?.version != null);
-const upToDate = computed(() => phase.value === "up-to-date");
-const failed = computed(() => phase.value === "failed");
-const notes = computed(() => info.value?.notes?.trim() || null);
-
-// 更新/偏好读取失败的原始错误只进控制台：界面用固定文案，避免把 Rust/插件
-// 原始错误直接暴露给用户（诊断日志仍可在 Rust 侧查到）。
-watch(errorMessage, (message) => {
-  if (message) console.warn(`update check failed: ${message}`);
-});
-watch(preferenceError, (message) => {
-  if (message) console.warn(`update preferences failed: ${message}`);
-});
-
-/**
- * 更新状态行（对齐 Mac 设置页的“已是最新版本 / 正在检查”一行）：语气由状态
- * 决定，成功给绿色，失败给错误色，进行中给中性文案。
- */
-const updateStatus = computed<{ tone: "success" | "error" | "pending" | "idle"; text: string }>(
-  () => {
-    if (phase.value === "installing") {
-      return { tone: "pending", text: t("正在安装更新，应用将自动重启…") };
-    }
-    if (phase.value === "downloading") {
-      return {
-        tone: "pending",
-        text: t("正在下载更新… {progress}", {
-          progress: appUpdateProgressText(progress.value),
-        }),
-      };
-    }
-    if (checking.value) return { tone: "pending", text: t("正在检查更新…") };
-    if (upToDate.value) return { tone: "success", text: t("已经是最新版本。") };
-    if (failed.value) {
-      return { tone: "error", text: t("检查更新失败，请稍后重试。") };
-    }
-    return { tone: "idle", text: t("手动检查是否有新版本。") };
-  },
-);
 
 const launchAtLogin = ref(false);
 /**
@@ -180,18 +123,6 @@ async function runOnboardingWizard(): Promise<void> {
   } finally {
     onboardingBusy.value = false;
   }
-}
-
-async function onCheck(): Promise<void> {
-  await check(true);
-}
-
-async function onInstall(): Promise<void> {
-  await install();
-}
-
-async function onPreviewToggle(event: Event): Promise<void> {
-  await setIncludePrereleases((event.target as HTMLInputElement).checked);
 }
 
 async function onThemeChange(event: Event): Promise<void> {
@@ -262,7 +193,6 @@ async function onAppIconChange(event: Event): Promise<void> {
 }
 
 onMounted(() => {
-  void loadUpdatePreferences();
   void getLaunchAtLogin()
     .then((enabled) => { launchAtLogin.value = enabled; })
     .catch((error) => {
@@ -330,7 +260,7 @@ const ROW_ICONS: Record<string, { strokes: string[]; fills?: string[] }> = {
       </div>
     </header>
 
-    <!-- 顶部模块（对齐 Mac 设置页：左边应用标识，右边版本与检查更新）。 -->
+    <!-- 顶部模块仅显示本地版本；离线构建不提供更新检查。 -->
     <article class="card settings-overview">
       <div class="overview-identity">
         <img class="app-logo" :src="appIconPreview" :alt="t('无线麦 SayAll 应用图标')" />
@@ -342,84 +272,8 @@ const ROW_ICONS: Record<string, { strokes: string[]; fills?: string[] }> = {
         <div class="version-row">
           <span class="muted">{{ t("当前版本") }}</span>
           <strong class="version-value">{{ version }}</strong>
-          <span v-if="updateAvailable" class="badge success">{{ t("可更新") }}</span>
-          <label
-            class="toggle-row prerelease-toggle"
-            :title="t('开启后，检查更新时也会包含尚在测试中的预览版本。')"
-          >
-            <span>{{ t("检查预览版更新") }}</span>
-            <input
-              type="checkbox"
-              class="toggle-input"
-              :checked="includePrereleases"
-              :disabled="preferenceBusy || checking || installing"
-              @change="onPreviewToggle"
-            />
-          </label>
         </div>
-
-        <div class="check-row">
-          <button
-            class="secondary-button check-button"
-            type="button"
-            :disabled="!canCheck"
-            @click="onCheck"
-          >
-            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
-              <path
-                d="M20 12a8 8 0 1 1-2.3-5.6"
-                stroke="currentColor"
-                stroke-width="1.9"
-                stroke-linecap="round"
-                stroke-linejoin="round"
-              />
-              <path
-                d="M20.4 3.6v4.8h-4.8"
-                stroke="currentColor"
-                stroke-width="1.9"
-                stroke-linecap="round"
-                stroke-linejoin="round"
-              />
-            </svg>
-            {{ failed ? t("重试检查") : t("检查更新…") }}
-          </button>
-        </div>
-        <p v-if="preferenceError" class="update-error">
-          {{ t("无法读取或保存更新设置，请稍后重试。") }}
-        </p>
-
-        <hr class="settings-divider" />
-
-        <div class="update-panel" aria-live="polite">
-          <template v-if="updateAvailable">
-            <p class="update-status success">
-              {{ t("发现新版本") }} <strong>{{ info?.version }}</strong>{{ t("（当前 {current}）", { current: info?.currentVersion ?? "" }) }}
-            </p>
-            <p v-if="notes" class="muted update-notes">{{ notes }}</p>
-            <div class="update-actions">
-              <button class="primary-button" type="button" :disabled="installing" @click="onInstall">
-                {{ t("下载并安装") }}
-              </button>
-            </div>
-          </template>
-          <p v-else class="update-status" :class="updateStatus.tone">{{ updateStatus.text }}</p>
-
-          <div
-            v-if="phase === 'downloading' && progress.contentLength"
-            class="update-progress"
-            role="progressbar"
-            :aria-valuenow="Math.min(100, (progress.downloaded / progress.contentLength) * 100)"
-            aria-valuemin="0"
-            aria-valuemax="100"
-          >
-            <div
-              class="update-progress-bar"
-              :style="{
-                width: `${Math.min(100, (progress.downloaded / progress.contentLength) * 100)}%`,
-              }"
-            ></div>
-          </div>
-        </div>
+        <p class="muted">{{ t("离线版本不会自动检查或下载更新。") }}</p>
       </div>
     </article>
 
